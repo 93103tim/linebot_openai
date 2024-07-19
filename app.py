@@ -14,6 +14,7 @@ import datetime
 import openai
 import time
 import traceback
+import google.generativeai as genai
 #======python的函數庫==========
 
 app = Flask(__name__)
@@ -22,17 +23,16 @@ static_tmp_path = os.path.join(os.path.dirname(__file__), 'static', 'tmp')
 line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 # Channel Secret
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
-# OPENAI API Key初始化設定
-openai.api_key = os.getenv('OPENAI_API_KEY')
-
+#Gemini api
+genai.configure(api_key=os.environ['GOOGLE_GEMINI_API_TOKEN'])
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 def GPT_response(text):
     # 接收回應
-    response = openai.Completion.create(model="gpt-3.5-turbo-instruct", prompt=text, temperature=0.5, max_tokens=500)
-    print(response)
-    # 重組回應
-    answer = response['choices'][0]['text'].replace('。','')
-    return answer
+    response = model.generate_content(text)
+    print(response.text)
+    
+    return response.text
 
 
 # 監聽所有來自 /callback 的 Post Request
@@ -55,30 +55,16 @@ def callback():
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     msg = event.message.text
-    try:
-        GPT_answer = GPT_response(msg)
-        print(GPT_answer)
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(GPT_answer))
-    except:
-        print(traceback.format_exc())
-        line_bot_api.reply_message(event.reply_token, TextSendMessage('你所使用的OPENAI API key額度可能已經超過，請於後台Log內確認錯誤訊息'))
+    
+    GPT_answer = GPT_response(msg)
+    print(GPT_answer)
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(GPT_answer))
         
 
 @handler.add(PostbackEvent)
 def handle_message(event):
     print(event.postback.data)
 
-
-@handler.add(MemberJoinedEvent)
-def welcome(event):
-    uid = event.joined.members[0].user_id
-    gid = event.source.group_id
-    profile = line_bot_api.get_group_member_profile(gid, uid)
-    name = profile.display_name
-    message = TextSendMessage(text=f'{name}歡迎加入')
-    line_bot_api.reply_message(event.reply_token, message)
-        
-        
 import os
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
